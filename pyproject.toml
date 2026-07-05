@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "faithgate"
+version = "0.1.0"
+description = "Fails your CI when your LLM app starts making things up — local-first faithfulness regression gate."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "albertofettucini" }]
+keywords = [
+  "llm", "evaluation", "faithfulness", "rag", "regression",
+  "ci", "observability", "ragas", "local-first", "llm-as-judge",
+]
+
+# The base install is STDLIB-ONLY: capture, offline heuristic judge, gate, diff, and the web
+# panel all run with zero dependencies. The RAGAS metric engine + the Claude judge live in the
+# [claude] extra; missing-extra paths raise a friendly "install faithgate[claude]".
+dependencies = []
+
+[project.optional-dependencies]
+# The trusted judge: RAGAS faithfulness + Claude via the user's own ANTHROPIC_API_KEY.
+# langchain-community is capped because ragas 0.4.x imports legacy modules
+# (langchain_community.chat_models.vertexai) that were removed in community 0.4+.
+claude = ["ragas>=0.4,<0.5", "langchain-anthropic>=1.0", "langchain-community>=0.3,<0.4"]
+# On-device HHEM entailment (local-verification mode) — heavy ML deps, superset of [claude].
+local = [
+  "ragas>=0.4,<0.5", "langchain-anthropic>=1.0", "langchain-community>=0.3,<0.4",
+  # transformers is capped at <5: the HHEM model's custom code (HHEMv2ForSequenceClassification)
+  # targets the 4.x API and crashes on 5.x weight-loading (all_tied_weights_keys).
+  "transformers>=4.40,<5", "torch>=2.2", "sentence-transformers>=3.0", "langchain-ollama>=0.2",
+]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+faithgate = "faithgate.gate.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/albertofettucini/faithgate"
+
+[tool.hatch.build.targets.wheel]
+packages = ["faithgate"]

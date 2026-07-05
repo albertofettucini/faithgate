@@ -1,0 +1,68 @@
+name: eval-gate
+
+# Two jobs, both offline/deterministic (heuristic judge, no API key):
+#   gate               — baseline vs candidate must stay green (the normal PR gate)
+#   proves-detection   — baseline vs a suite with PLANTED hallucinations must go RED;
+#                        the step INVERTS the exit code, so this job failing means the gate
+#                        LOST its ability to catch regressions. A green badge here is proof.
+# To score with the real Claude judge instead: pip install ".[claude]", swap --judge claude,
+# and set the ANTHROPIC_API_KEY repository secret.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Score the baseline version
+        run: python -m faithgate.gate.cli --db ci.db run --suite examples/rag_app/suite_baseline.jsonl --label baseline --judge heuristic
+
+      - name: Score the candidate version
+        run: python -m faithgate.gate.cli --db ci.db run --suite examples/rag_app/suite_candidate.jsonl --label candidate --judge heuristic
+
+      - name: Gate — fail if faithfulness regressed
+        run: |
+          set +e
+          python -m faithgate.gate.cli --db ci.db gate --base baseline --head candidate \
+            --max-regression 0.05 --min-score 0.5 | tee gate.txt
+          status=${PIPESTATUS[0]}
+          { echo '### faithgate — baseline vs candidate'; echo '```'; cat gate.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  proves-detection:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Score the baseline version
+        run: python -m faithgate.gate.cli --db proof.db run --suite examples/rag_app/suite_baseline.jsonl --label baseline --judge heuristic
+
+      - name: Score a version with PLANTED hallucinations
+        run: python -m faithgate.gate.cli --db proof.db run --suite examples/rag_app/suite_regressed.jsonl --label regressed --judge heuristic
+
+      - name: Assert the gate catches the planted regression (inverted exit)
+        run: |
+          set +e
+          python -m faithgate.gate.cli --db proof.db gate --base baseline --head regressed \
+            --max-regression 0.05 --min-score 0.5 | tee proof.txt
+          status=${PIPESTATUS[0]}
+          { echo '### faithgate — planted-regression detection proof'; echo '```'; cat proof.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -eq 0 ]; then
+            echo '::error::the gate FAILED to catch a known planted regression'
+            exit 1
+          fi
+          echo "gate correctly went red (exit $status) — detection proven"

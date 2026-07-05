@@ -1,0 +1,30 @@
+# Secrets — the user's own API key lives here, NEVER commit it.
+.env
+.env.*
+
+# Local-only working docs — internal notes, never part of the public repo.
+PLAN.md
+HANDOFF.md
+AUDIT_*.md
+
+# Local trace store
+*.db
+*.db-wal
+*.db-shm
+.faithgate/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
