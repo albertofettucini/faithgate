@@ -10,7 +10,20 @@ from __future__ import annotations
 import html
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
+
+# the pass/fail pixel shield (assets/logo.svg), inlined as the tab icon
+_LOGO_SVG = (
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 99 108'>"
+    "<g fill='#639922'><rect x='9' width='81' height='9'/><rect y='9' width='99' height='45'/>"
+    "<rect x='9' y='54' width='81' height='18'/><rect x='18' y='72' width='63' height='9'/>"
+    "<rect x='27' y='81' width='45' height='9'/><rect x='36' y='90' width='27' height='9'/></g>"
+    "<g fill='#E24B4A'><rect x='54' width='36' height='9'/><rect x='54' y='9' width='45' height='45'/>"
+    "<rect x='54' y='54' width='36' height='18'/><rect x='54' y='72' width='27' height='9'/>"
+    "<rect x='54' y='81' width='18' height='9'/><rect x='54' y='90' width='9' height='9'/></g>"
+    "<rect x='45' width='9' height='108' fill='#2C2C2A'/></svg>"
+)
+_FAVICON = "data:image/svg+xml," + quote(_LOGO_SVG)
 
 from ..store import db
 
@@ -55,8 +68,10 @@ def _page(title: str, body: str) -> str:
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        f"<title>{html.escape(title)} · FaithGate</title><style>{_CSS}</style></head><body>"
-        "<header><div class='name'>Faith<span>Gate</span></div>"
+        f"<title>{html.escape(title)} · FaithGate</title>"
+        f"<link rel=\"icon\" href=\"{_FAVICON}\"><style>{_CSS}</style></head><body>"
+        f"<header><div class='name'><img src=\"{_FAVICON}\" width=\"20\" alt=\"\" "
+        "style='vertical-align:-3px;margin-right:8px'>Faith<span>Gate</span></div>"
         "<div class='tag'>local faithfulness regression gate</div></header>"
         f"<main>{body}</main></body></html>"
     )

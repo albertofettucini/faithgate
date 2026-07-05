@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" width="110" alt="FaithGate — a pixel shield, half green half red, split by the gate">
+</p>
+
 # FaithGate
 
 > **You changed a prompt. Did any answer quietly start making things up?**
