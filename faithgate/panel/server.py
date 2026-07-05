@@ -55,8 +55,8 @@ def _page(title: str, body: str) -> str:
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        f"<title>{html.escape(title)} · faithgate</title><style>{_CSS}</style></head><body>"
-        "<header><div class='name'>faith<span>gate</span></div>"
+        f"<title>{html.escape(title)} · FaithGate</title><style>{_CSS}</style></head><body>"
+        "<header><div class='name'>Faith<span>Gate</span></div>"
         "<div class='tag'>local faithfulness regression gate</div></header>"
         f"<main>{body}</main></body></html>"
     )

@@ -1,4 +1,4 @@
-# faithgate — design rationale
+# FaithGate — design rationale
 
 Why the tool is shaped the way it is: the locked decisions, the traps they avoid, and what was
 deliberately cut. Companion to [README.md](README.md) (what it does) and [ROADMAP.md](ROADMAP.md)
@@ -12,7 +12,7 @@ applied somewhere: to the judge, to the gate verdict, to the docs, to the depend
 ## Positioning
 
 The "simple + local + eval-first" lane is well served (promptfoo, Arize Phoenix, DeepEval — see the
-README's comparison). faithgate deliberately does NOT compete there. It is a *complement* with one
+README's comparison). FaithGate deliberately does NOT compete there. It is a *complement* with one
 job: **fail-closed blocking of faithfulness regressions**, version-to-version, with measured honesty
 about the judge that produced every number.
 
@@ -83,7 +83,7 @@ Recorded because pretending the original plan was built would violate the one pr
 - **Per-call hardening added after real-world testing:** RAGAS injects `temperature=0.01` per call
   unless bypassed (Sonnet-5-class models reject non-default sampling params) and retries every
   exception 10× with up to 60s waits — turning any persistent error into a multi-minute silent
-  hang. faithgate bypasses the injection, caps retries, bounds every judge call with a timeout, and
+  hang. FaithGate bypasses the injection, caps retries, bounds every judge call with a timeout, and
   surfaces the first real error instead.
 
 ## What proves the claims

@@ -1,4 +1,4 @@
-# faithgate roadmap — post-v1 layers
+# FaithGate roadmap — post-v1 layers
 
 All layers feed on the same v1 foundation: **trace + score + version identity stored together**
 (`trace.prompt_version_id` at capture time, `run.*`/`manifest_json` for suite runs, raw span

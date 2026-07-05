@@ -1,8 +1,8 @@
-# faithgate
+# FaithGate
 
 > **You changed a prompt. Did any answer quietly start making things up?**
 >
-> faithgate scores every answer against its sources, diffs versions, and **fails CI on
+> FaithGate scores every answer against its sources, diffs versions, and **fails CI on
 > regression** — with a judge whose trustworthiness is *measured* (85%, n=40), never assumed.
 > Zero infra, fully local, **pytest for prompts.**
 
@@ -19,7 +19,7 @@ It captures your app's question → answer → retrieved-context turns, scores e
 (is the answer supported by the context it was given?), and **fails the build when a new version
 scores worse than the last**. Everything runs locally — traces never leave your machine.
 
-**Zero telemetry.** faithgate itself sends nothing anywhere: no analytics, no phoning home, no
+**Zero telemetry.** FaithGate itself sends nothing anywhere: no analytics, no phoning home, no
 account. The only network traffic is the API call to the judge **you** configured (plus a one-time
 HuggingFace model download if you opt into the `[local]` HHEM extra).
 
@@ -71,15 +71,15 @@ The "simple + local + eval-first" lane is already well served:
 | [Arize Phoenix](https://github.com/Arize-ai/phoenix) | `pip install` + SQLite, local, ships judge templates. Core is Elastic-2.0 (source-available). |
 | [DeepEval](https://github.com/confident-ai/deepeval) | Apache-2.0, `pip install` + Ollama, 50+ metrics. |
 
-**Why not just promptfoo?** You probably should use promptfoo — faithgate is not a replacement
+**Why not just promptfoo?** You probably should use promptfoo — FaithGate is not a replacement
 for your eval stack, it's a **complement** that does exactly one thing: fail-closed blocking of
 *faithfulness* regressions, version-to-version, with honesty guarantees about the judge that
-produced every number. Keep your existing suites and tools; faithgate runs beside them as the
+produced every number. Keep your existing suites and tools; FaithGate runs beside them as the
 narrow tripwire for "did my app quietly start making things up." And the roadmap inverts the one
-thing hand-written suites can't do: promptfoo's golden sets are authored by you — faithgate's v2
+thing hand-written suites can't do: promptfoo's golden sets are authored by you — FaithGate's v2
 mines them **from your production traffic** (the schema already makes promotion two INSERTs).
 
-faithgate does **not** try to out-feature anyone. It targets the narrow seam:
+FaithGate does **not** try to out-feature anyone. It targets the narrow seam:
 
 1. **A regression *gate*, not a dashboard** — run the suite on every change, diff the scores, fail
    the build. Fail-closed: zero matched cases or total abstention can never turn CI green.
@@ -111,7 +111,7 @@ question keeps its baseline instead of being treated as a new case):
 
 ## Honest judging
 
-faithgate never presents a score as more certain than it is.
+FaithGate never presents a score as more certain than it is.
 
 - **Frontier judge by default.** Small local models are weak judges — an 8B model scores ~61% on
   faithfulness benchmarks. So Claude is the trusted default; everything else is a labeled trade-off.
