@@ -25,6 +25,19 @@ class AgreementTest(unittest.TestCase):
         self.assertEqual(m["abstained"], 1)
         self.assertEqual(m["scored"], 1)
 
+    def test_per_category_breakdown(self):
+        results = [
+            {"label": 1, "score": 0.9, "abstained": False, "category": "clean"},
+            {"label": 0, "score": 0.9, "abstained": False, "category": "cross-chunk"},  # missed
+        ]
+        m = compute_agreement(results)
+        self.assertEqual(set(m["categories"]), {"clean", "cross-chunk"})
+        self.assertEqual(m["categories"]["cross-chunk"]["fp"], 1)
+
+    def test_single_category_has_no_breakdown(self):
+        results = [{"label": 1, "score": 0.9, "abstained": False}]
+        self.assertEqual(compute_agreement(results)["categories"], {})
+
     def test_balanced_accuracy_handles_imbalance(self):
         # all-faithful prediction on a skewed set should NOT look great on balanced accuracy
         results = [

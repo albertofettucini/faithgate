@@ -24,8 +24,7 @@ def load_goldens(path) -> list:
     return items
 
 
-def compute_agreement(results: list, threshold: float = 0.5) -> dict:
-    """results: list of {label:0|1, score:float|None, abstained:bool}. label 1 = faithful."""
+def _aggregate(results: list, threshold: float) -> dict:
     tp = tn = fp = fn = abstained = 0
     for r in results:
         if r["abstained"] or r["score"] is None:
@@ -52,6 +51,22 @@ def compute_agreement(results: list, threshold: float = 0.5) -> dict:
     }
 
 
+def compute_agreement(results: list, threshold: float = 0.5) -> dict:
+    """results: {label:0|1, score:float|None, abstained:bool, category?:str}. label 1 = faithful.
+
+    When results span multiple categories (suite strata), a per-category breakdown is included —
+    that's how a judge's blind spots become visible instead of averaged away."""
+    metrics = _aggregate(results, threshold)
+    by_cat: dict = {}
+    for r in results:
+        by_cat.setdefault(r.get("category", "clean"), []).append(r)
+    metrics["categories"] = (
+        {cat: _aggregate(rs, threshold) for cat, rs in sorted(by_cat.items())}
+        if len(by_cat) > 1 else {}
+    )
+    return metrics
+
+
 PER_SAMPLE_TIMEOUT = 120  # seconds — a stuck judge call becomes a visible error, not a hang
 
 
@@ -68,12 +83,14 @@ async def run_calibration(scorer, judge, goldens: list, threshold: float = 0.5,
                 scorer.ascore(Sample(g["question"], g["answer"], g.get("contexts", []))),
                 timeout=PER_SAMPLE_TIMEOUT,
             )
-            results.append({"label": int(g["label"]), "score": r.score, "abstained": r.abstained})
+            results.append({"label": int(g["label"]), "score": r.score, "abstained": r.abstained,
+                            "category": g.get("category", "clean")})
         except Exception as exc:  # same policy as the worker: an error is an abstention, not a crash
             name = "TimeoutError (judge call exceeded %ss)" % PER_SAMPLE_TIMEOUT \
                 if isinstance(exc, asyncio.TimeoutError) else type(exc).__name__
             errors.append(f"{name}: {exc}")
-            results.append({"label": int(g["label"]), "score": None, "abstained": True})
+            results.append({"label": int(g["label"]), "score": None, "abstained": True,
+                            "category": g.get("category", "clean")})
         if progress:
             print(f"\r  [{i}/{len(goldens)}] judged · {len(errors)} errored", end="",
                   file=sys.stderr, flush=True)
@@ -93,6 +110,12 @@ def render_report(judge, m: dict) -> str:
         f"  (n={m['n']} — directional, not precise)",
         f"  faithful kept: {m['tp']}/{m['tp'] + m['fn']}   unfaithful caught: {m['tn']}/{m['tn'] + m['fp']}",
     ]
+    if m.get("categories"):
+        lines.append("  by category:")
+        for cat, cm in m["categories"].items():
+            caught = f"{cm['tn']}/{cm['tn'] + cm['fp']}" if (cm['tn'] + cm['fp']) else "–"
+            lines.append(f"    {cat:<24} {pct(cm['balanced_accuracy'])} balanced · "
+                         f"unfaithful caught: {caught} · n={cm['n']}")
     errors = m.get("errors") or []
     if errors:
         # a broken judge must be loud, never laundered into quiet abstention
