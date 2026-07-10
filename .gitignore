@@ -6,6 +6,7 @@
 PLAN.md
 HANDOFF.md
 AUDIT_*.md
+LAUNCH_STORY.md
 
 # Local trace store
 *.db

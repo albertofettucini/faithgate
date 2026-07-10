@@ -113,10 +113,33 @@ question keeps its baseline instead of being treated as a new case):
 {"id": "capital-q", "question": "...", "answer": "...", "contexts": ["retrieved chunk 1", "..."]}
 ```
 
+## Designing your suite
+
+A suite of clean, high-recall happy-path queries will keep the gate green while the hard cases
+quietly rot. Practitioner feedback converged on three strata worth adding deliberately:
+
+- **Partial-context cases** — queries where retrieval returns incomplete context. This is where a
+  subtle prompt change degrades first; if every case has perfect context, you will never see it.
+- **Cross-chunk synthesis cases** — the answer stitches two retrieved chunks correctly but inserts
+  a claim neither chunk alone supports. The hardest pattern for NLI-style judges, and reportedly
+  the most common real-world failure.
+- **Plausible-but-unsupported cases** — confident, reasonable-sounding claims with no grounding;
+  these slip past judges tuned only on obvious hallucinations.
+
+Give every case a stable `id`, keep the happy-path cases too, and let promoted production failures
+(see [ROADMAP](ROADMAP.md) v2) grow the suite over time.
+
 ## Honest judging
 
 FaithGate never presents a score as more certain than it is.
 
+- **The design bet: relative deltas.** The judge doesn't have to be right in absolute terms — it
+  has to be *consistently* wrong. A version-to-version delta survives a biased scorer, which is
+  exactly why the gate refuses cross-judge comparisons (manifests + exit 3): a delta only means
+  something while the bias is held constant. The honest boundary: the bet weakens when a prompt
+  change pushes the generator into the judge's blind spot (same-family correlation — e.g. Claude
+  judging Claude); HHEM's on-device verification partially decorrelates this, and judge diversity
+  is on the ideas list. Credit to u/marintkael for sharpening this framing.
 - **Frontier judge by default.** Small local models are weak judges — an 8B model scores ~61% on
   faithfulness benchmarks. So Claude is the trusted default; everything else is a labeled trade-off.
 - **`local-verification` is labeled precisely.** `--judge claude-local` runs the entailment check

@@ -41,7 +41,8 @@ Replay captured traffic on a cheaper model, compare scores: "X% of your queries 
 
 ## Standing constraints
 - Every layer stays inside the brand: one metric done honestly, zero-infra, labeled judges,
-  abstention over fake numbers.
+  abstention over fake numbers. No new metric families, no panel expansion — recorded ideas live
+  in [IDEAS.md](IDEAS.md), deliberately unbuilt.
 - Drift/cost-map are the closest to the saturated observability-platform lane faithgate
   deliberately exited — they ship as *reports over data you already have*, never as dashboards,
   alerting, or routing.
