@@ -22,7 +22,7 @@ import os
 import sqlite3
 
 from .. import __version__
-from ..gate.diff import compare, load_run_scores, render_text
+from ..gate.diff import compare, load_run_scores, render_json, render_markdown, render_text
 from ..store import db
 
 DEFAULT_DB = os.path.expanduser("~/.faithgate/faithgate.db")
@@ -234,9 +234,14 @@ def _cmd_gate(conn: sqlite3.Connection, args) -> int:
         conn.execute("UPDATE run SET manifest_json=? WHERE id=?", (json.dumps(head_m), head_id))
     conn.commit()
 
-    print(render_text(result))
-    for p in policy_failures:
-        print(f"  ✗ policy: {p}")
+    if args.format == "markdown":
+        print(render_markdown(result, policy_failures))
+    elif args.format == "json":
+        print(render_json(result, policy_failures))
+    else:
+        print(render_text(result))
+        for p in policy_failures:
+            print(f"  ✗ policy: {p}")
     return 0 if result.passed else 1
 
 
@@ -310,6 +315,74 @@ def _cmd_calibrate(args) -> int:
     return 0
 
 
+_INIT_SUITE = """\
+{"id": "example-1", "question": "What is the capital of France?", "answer": "Paris is the capital of France.", "contexts": ["France is a country in Western Europe. Its capital and largest city is Paris."]}
+{"id": "example-2", "question": "When was the Eiffel Tower completed?", "answer": "It was completed in 1889.", "contexts": ["Construction of the Eiffel Tower finished in 1889 for the World's Fair."]}
+{"id": "example-3", "question": "REPLACE these examples with real questions from YOUR app", "answer": "Each line: a question, your app's answer, and the retrieved context it was given.", "contexts": ["Give every case a stable id so reworded questions keep their baseline."]}
+"""
+
+_INIT_WORKFLOW = """\
+name: faithgate
+
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # TODO: replace this placeholder with YOUR app answering the questions in
+      # evals/baseline.jsonl and writing evals/candidate.jsonl (same ids, fresh answers).
+      # Until then, candidate = baseline, so the gate stays green.
+      - name: Generate candidate answers (placeholder)
+        run: cp evals/baseline.jsonl evals/candidate.jsonl
+
+      - uses: albertofettucini/faithgate@main
+        with:
+          baseline-suite: evals/baseline.jsonl
+          candidate-suite: evals/candidate.jsonl
+          judge: heuristic
+          # for the trusted Claude judge instead:
+          #   judge: claude
+          #   anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+"""
+
+
+def _cmd_init(args) -> int:
+    suite_path = os.path.join(args.dir, "evals", "baseline.jsonl")
+    workflow_path = os.path.join(args.dir, ".github", "workflows", "faithgate.yml")
+
+    existing = [p for p in (suite_path, workflow_path) if os.path.exists(p)]
+    if existing:
+        print("refusing to overwrite existing files:")
+        for p in existing:
+            print(f"  {p}")
+        return 2
+
+    os.makedirs(os.path.dirname(suite_path), exist_ok=True)
+    os.makedirs(os.path.dirname(workflow_path), exist_ok=True)
+    with open(suite_path, "w", encoding="utf-8") as fh:
+        fh.write(_INIT_SUITE)
+    with open(workflow_path, "w", encoding="utf-8") as fh:
+        fh.write(_INIT_WORKFLOW)
+
+    print("created:")
+    print(f"  {suite_path}")
+    print(f"  {workflow_path}")
+    print("")
+    print("next steps:")
+    print("  1. Replace the example cases in evals/baseline.jsonl with real turns from your app.")
+    print("  2. Edit the TODO step in the workflow: your app answers the same questions into")
+    print("     evals/candidate.jsonl on every PR.")
+    print("  3. Commit both files — the gate posts its verdict on your next PR.")
+    return 0
+
+
 def _cmd_up(args) -> int:
     from ..panel.server import serve
 
@@ -340,6 +413,8 @@ def main(argv: list = None) -> int:
                    help="fail when baseline cases are missing from the new run")
     g.add_argument("--max-abstained", type=int, default=None,
                    help="fail when more than N cases abstained (guards targeted abstention)")
+    g.add_argument("--format", default="text", choices=["text", "markdown", "json"],
+                   help="report format (markdown is PR-comment ready)")
 
     s = sub.add_parser("show", help="show a run's scored traces", parents=[common])
     s.add_argument("--run", required=True, help="run id or label")
@@ -365,9 +440,14 @@ def main(argv: list = None) -> int:
     u.add_argument("--host", default="127.0.0.1")
     u.add_argument("--port", type=int, default=7654)
 
+    i = sub.add_parser("init", help="scaffold a starter suite + CI workflow into a project")
+    i.add_argument("--dir", default=".", help="target project directory")
+
     args = parser.parse_args(argv)
     if args.cmd == "up":
         return _cmd_up(args)
+    if args.cmd == "init":
+        return _cmd_init(args)
     if args.cmd == "calibrate":
         return _cmd_calibrate(args)
 

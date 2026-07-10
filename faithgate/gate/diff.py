@@ -151,6 +151,55 @@ def load_run_scores(conn: sqlite3.Connection, run_id: str) -> list:
     ]
 
 
+def render_markdown(result: DiffResult, policy_failures: list = ()) -> str:
+    """PR-comment-ready markdown: verdict, counts, and a per-case regression table."""
+    verdict = "✅ **PASS**" if result.passed else "❌ **FAIL**"
+    esc = lambda s: str(s).replace("|", "\\|")
+    fmt = lambda v: "—" if v is None else f"{v:.2f}"
+    lines = [
+        f"### FaithGate regression gate: {verdict}",
+        "",
+        f"`matched {result.matched}` · `regressed {len(result.regressions)}` · "
+        f"`improved {len(result.improved)}` · `unchanged {result.unchanged}` · "
+        f"`abstained {len(result.abstained)}` · `new {len(result.new_cases)}` · "
+        f"`missing {len(result.missing_cases)}`",
+    ]
+    if result.verdict == "nothing_compared":
+        lines += ["", "⚠️ **Nothing compared** — no case in the new run matches the baseline."]
+    if result.regressions:
+        lines += ["", "| case | baseline | new | Δ |", "|---|---|---|---|"]
+        for c in result.regressions:
+            delta = "—" if c.delta is None else f"{c.delta:+.2f}"
+            tag = " *(below floor)*" if c.kind == "below_floor" else ""
+            lines.append(f"| {esc(c.question)}{tag} | {fmt(c.baseline)} | {fmt(c.head)} | {delta} |")
+    if result.improved:
+        lines += ["", "<details><summary>Improved (" + str(len(result.improved)) + ")</summary>", ""]
+        for c in result.improved:
+            lines.append(f"- {esc(c.question)}  {fmt(c.baseline)} → {fmt(c.head)}")
+        lines += ["", "</details>"]
+    for label, items in (("Abstained", result.abstained), ("Missing", result.missing_cases),
+                         ("New", result.new_cases)):
+        if items:
+            shown = ", ".join(esc(q) for q in items[:5])
+            more = f" … +{len(items) - 5}" if len(items) > 5 else ""
+            lines.append(f"- **{label} ({len(items)})**: {shown}{more}")
+    for p in policy_failures:
+        lines.append(f"- ✗ **policy**: {p}")
+    lines += ["", "<sub>FaithGate — local faithfulness regression gate · scores measured against "
+              "sources, judge honesty measured against humans</sub>"]
+    return "\n".join(lines)
+
+
+def render_json(result: DiffResult, policy_failures: list = ()) -> str:
+    """Machine-readable verdict for scripting."""
+    import json
+    from dataclasses import asdict
+
+    payload = asdict(result)
+    payload["policy_failures"] = list(policy_failures)
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
 def _list_some(lines: list, items: list, label: str, cap: int = 5) -> None:
     lines.append(f"  {label} ({len(items)}):")
     for q in items[:cap]:

@@ -1,0 +1,87 @@
+name: 'FaithGate'
+description: 'Fail-closed faithfulness regression gate — fails the check and posts the score diff as a sticky PR comment.'
+branding:
+  icon: 'shield'
+  color: 'green'
+
+inputs:
+  baseline-suite:
+    description: 'Path to the baseline suite JSONL (known-good answers)'
+    required: true
+  candidate-suite:
+    description: 'Path to the candidate suite JSONL (this version''s answers)'
+    required: true
+  judge:
+    description: 'claude | claude-local | heuristic'
+    default: 'heuristic'
+  max-regression:
+    description: 'Maximum allowed score drop per case'
+    default: '0.05'
+  min-score:
+    description: 'Hard floor every scored case must clear'
+    default: '0.5'
+  anthropic-api-key:
+    description: 'Required only when judge is claude/claude-local (pass a repo secret)'
+    default: ''
+  github-token:
+    description: 'Token used to post the PR comment'
+    default: '${{ github.token }}'
+  python-version:
+    default: '3.12'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install FaithGate
+      shell: bash
+      run: |
+        if [ "${{ inputs.judge }}" = "heuristic" ]; then
+          python -m pip install -q faithgate
+        else
+          python -m pip install -q "faithgate[claude]"
+        fi
+
+    - name: Score baseline and candidate
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        faithgate --db fg-ci.db run --suite "${{ inputs.baseline-suite }}"  --label baseline  --judge "${{ inputs.judge }}"
+        faithgate --db fg-ci.db run --suite "${{ inputs.candidate-suite }}" --label candidate --judge "${{ inputs.judge }}"
+
+    - name: Gate
+      id: gate
+      shell: bash
+      run: |
+        set +e
+        faithgate --db fg-ci.db gate --base baseline --head candidate \
+          --max-regression "${{ inputs.max-regression }}" --min-score "${{ inputs.min-score }}" \
+          --format markdown | tee fg-report.md
+        echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+        cat fg-report.md >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Post sticky PR comment
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const marker = '<!-- faithgate-report -->';
+          const body = fs.readFileSync('fg-report.md', 'utf8') + '\n' + marker;
+          const {data: comments} = await github.rest.issues.listComments({
+            ...context.repo, issue_number: context.issue.number, per_page: 100});
+          const prev = comments.find(c => c.body && c.body.includes(marker));
+          if (prev) {
+            await github.rest.issues.updateComment({...context.repo, comment_id: prev.id, body});
+          } else {
+            await github.rest.issues.createComment({...context.repo, issue_number: context.issue.number, body});
+          }
+
+    - name: Enforce the gate verdict
+      shell: bash
+      run: exit "${{ steps.gate.outputs.status }}"

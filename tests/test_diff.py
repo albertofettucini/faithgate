@@ -1,6 +1,7 @@
+import json
 import unittest
 
-from faithgate.gate.diff import TraceScore, compare
+from faithgate.gate.diff import TraceScore, compare, render_json, render_markdown
 
 
 def ts(key, score, abstained=False):
@@ -107,6 +108,26 @@ class CompareTest(unittest.TestCase):
         r = compare([ts("a", 0.9)], [broken])
         self.assertFalse(r.passed)                    # single case → nothing compared
         self.assertEqual(r.abstained, ["q-a"])
+
+    def test_markdown_fail_has_verdict_table_and_policy(self):
+        r = compare([ts("a", 0.9)], [ts("a", 0.2)])
+        md = render_markdown(r, ["1 baseline case(s) missing"])
+        self.assertIn("❌", md)
+        self.assertIn("| q-a", md)               # regression table row
+        self.assertIn("policy", md)
+
+    def test_markdown_escapes_pipes(self):
+        base = [TraceScore(key="k", question="a|b", score=0.9, abstained=False)]
+        head = [TraceScore(key="k", question="a|b", score=0.1, abstained=False)]
+        md = render_markdown(compare(base, head))
+        self.assertIn("a\\|b", md)               # a raw pipe would break the table
+
+    def test_json_roundtrip(self):
+        r = compare([ts("a", 0.9)], [ts("a", 0.89)])
+        payload = json.loads(render_json(r))
+        self.assertTrue(payload["passed"])
+        self.assertIn("regressions", payload)
+        self.assertEqual(payload["policy_failures"], [])
 
     def test_exact_threshold_is_consistent(self):
         # float-representation jitter must not flip verdicts at exactly max_regression

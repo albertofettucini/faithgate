@@ -150,6 +150,36 @@ class JudgeChangeGuardTest(unittest.TestCase):
         self.assertTrue(rows and all(r["passed"] == 1 for r in rows))
 
 
+class InitTest(unittest.TestCase):
+    def test_scaffolds_two_files_and_refuses_overwrite(self):
+        d = tempfile.mkdtemp()
+        self.assertEqual(main(["init", "--dir", d]), 0)
+        suite = os.path.join(d, "evals", "baseline.jsonl")
+        wf = os.path.join(d, ".github", "workflows", "faithgate.yml")
+        self.assertTrue(os.path.exists(suite) and os.path.exists(wf))
+        with open(wf) as f:
+            content = f.read()
+        self.assertIn("albertofettucini/faithgate@", content)
+        self.assertIn("candidate-suite", content)
+        with open(suite) as f:
+            first = json.loads(f.readline())
+        self.assertIn("id", first)
+        # never overwrite an existing setup
+        self.assertEqual(main(["init", "--dir", d]), 2)
+
+    def test_gate_formats_run_clean(self):
+        d = tempfile.mkdtemp()
+        db_path = os.path.join(d, "t.db")
+        suite = os.path.join(d, "s.jsonl")
+        write_suite(suite, SUITE)
+        main(["--db", db_path, "run", "--suite", suite, "--label", "a", "--judge", "heuristic"])
+        main(["--db", db_path, "run", "--suite", suite, "--label", "b", "--judge", "heuristic"])
+        self.assertEqual(main(["--db", db_path, "gate", "--base", "a", "--head", "b",
+                               "--format", "markdown"]), 0)
+        self.assertEqual(main(["--db", db_path, "gate", "--base", "a", "--head", "b",
+                               "--format", "json"]), 0)
+
+
 class _BoomScorer:
     def __init__(self, judge):
         self.judge = judge

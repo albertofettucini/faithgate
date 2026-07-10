@@ -181,6 +181,30 @@ FaithGate never presents a score as more certain than it is.
 
 Both jobs post the score-diff table to the Actions run summary.
 
+### Drop-in GitHub Action
+
+Gate any repo's PRs with the published action — it scores both suites, fails the check on
+regression, and posts the score table as a **sticky PR comment**:
+
+```yaml
+permissions:
+  pull-requests: write
+
+steps:
+  - uses: albertofettucini/faithgate@main
+    with:
+      baseline-suite: evals/baseline.jsonl
+      candidate-suite: evals/candidate.jsonl
+      # judge: claude
+      # anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Or scaffold the suite + workflow into your project with one command:
+
+```bash
+faithgate init
+```
+
 ## How it works
 
 ```
@@ -225,7 +249,8 @@ lives in [DESIGN.md](DESIGN.md). Highlights:
 | Command | What it does |
 |---|---|
 | `faithgate run --suite S --label L [--judge]` | score a suite of answers into a named run |
-| `faithgate gate --base A --head B [--allow-judge-change]` | compare two runs; exit non-zero on regression |
+| `faithgate gate --base A --head B [--format markdown\|json]` | compare two runs; exit non-zero on regression |
+| `faithgate init` | scaffold a starter suite + CI workflow into a project |
 | `faithgate runs` | list captured runs |
 | `faithgate show --run R` | show a run's scored cases |
 | `faithgate score [--judge] [--run] [--retry-errors]` | score pending traces; optionally re-score errored ones |
