@@ -6,6 +6,8 @@
     faithgate show  --run R              show one run's scored traces
     faithgate score [--retry-errors]     score pending (ingested-but-unscored) traces
     faithgate calibrate                  judge agreement with the human-labeled golden set
+    faithgate candidates / promote       turn captured failures into regression test cases
+    faithgate datasets / export          list datasets / export probes for your app
     faithgate up                         start the local web panel
 
 Every command accepts --db before OR after the subcommand (defaults to ~/.faithgate/faithgate.db).
@@ -295,6 +297,114 @@ def _cmd_score(conn: sqlite3.Connection, args) -> int:
     return 0
 
 
+def _short(text: str, width: int = 58) -> str:
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def _cmd_candidates(conn: sqlite3.Connection, args) -> int:
+    from ..promote import find_candidates
+
+    run_id = None
+    if args.run:
+        run_id = _resolve_run(conn, args.run)
+        if run_id is None:
+            print(f"Run not found: {args.run!r}. See `faithgate runs`.")
+            return 2
+    candidates = find_candidates(conn, run_id=run_id, below=args.below, limit=args.limit)
+    if not candidates:
+        print(f"No unpromoted failures below {args.below}.")
+        return 0
+    print(f"{'TRACE':<15} {'SCORE':>5}  {'RUN':<16} QUESTION")
+    for c in candidates:
+        label = _short(c.run_label or "(ad-hoc)", 16)
+        print(f"{c.trace_id[:14]:<15} {c.score:>5.2f}  {label:<16} {_short(c.question)}")
+    print(f"\npromote one:  faithgate promote {candidates[0].trace_id[:14]}")
+    print(f"promote all:  faithgate promote --below {args.below}" +
+          (f" --run \"{args.run}\"" if args.run else ""))
+    return 0
+
+
+def _cmd_promote(conn: sqlite3.Connection, args) -> int:
+    import sys
+
+    from ..promote import find_candidates, promote_trace, resolve_trace
+
+    def report(result):
+        if result.status == "promoted":
+            origin = f" (origin score {result.score:.2f})" if result.score is not None else ""
+            print(f"✅ promoted → {args.to} [{result.item_id[:8]}]{origin}: {_short(result.question)}")
+        else:
+            print(f"↷ already in {args.to} [{result.item_id[:8]}]: {_short(result.question)}")
+
+    if args.trace:  # single, explicit
+        trace_id, err = resolve_trace(conn, args.trace)
+        if err:
+            print(err)
+            return 2
+        report(promote_trace(conn, trace_id, dataset_name=args.to,
+                             allow_duplicate=args.allow_duplicate))
+        return 0
+
+    # bulk: show the table, then ONE confirmation — never silent
+    run_id = None
+    if args.run:
+        run_id = _resolve_run(conn, args.run)
+        if run_id is None:
+            print(f"Run not found: {args.run!r}. See `faithgate runs`.")
+            return 2
+    candidates = find_candidates(conn, run_id=run_id, below=args.below, limit=args.limit)
+    if not candidates:
+        print(f"No unpromoted failures below {args.below}.")
+        return 0
+    print(f"{'TRACE':<15} {'SCORE':>5}  QUESTION")
+    for c in candidates:
+        print(f"{c.trace_id[:14]:<15} {c.score:>5.2f}  {_short(c.question)}")
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print(f"\n{len(candidates)} case(s) listed — re-run with --yes to promote non-interactively.")
+            return 2
+        answer = input(f"\nPromote these {len(candidates)} case(s) into '{args.to}'? [y/N] ")
+        if answer.strip().lower() not in ("y", "yes"):
+            print("cancelled — nothing promoted.")
+            return 0
+    promoted = skipped = 0
+    for c in candidates:
+        result = promote_trace(conn, c.trace_id, dataset_name=args.to,
+                               allow_duplicate=args.allow_duplicate)
+        report(result)
+        promoted += result.status == "promoted"
+        skipped += result.status != "promoted"
+    print(f"\ndone: {promoted} promoted · {skipped} skipped (duplicates)")
+    return 0
+
+
+def _cmd_datasets(conn: sqlite3.Connection) -> int:
+    from ..promote import list_datasets
+
+    rows = list_datasets(conn)
+    if not rows:
+        print("No datasets yet — `faithgate promote` creates one from captured failures.")
+        return 0
+    print(f"{'NAME':<20} {'KIND':<10} ITEMS")
+    for r in rows:
+        print(f"{r['name']:<20} {r['kind']:<10} {r['items']}")
+    return 0
+
+
+def _cmd_export(conn: sqlite3.Connection, args) -> int:
+    from ..promote import export_probes
+
+    count = 0
+    for probe in export_probes(conn, args.dataset):
+        print(json.dumps(probe, ensure_ascii=False))
+        count += 1
+    if count == 0:
+        print(f"dataset {args.dataset!r} is empty or does not exist "
+              "(see `faithgate datasets`)", file=__import__("sys").stderr)
+        return 2
+    return 0
+
+
 def _cmd_calibrate(args) -> int:
     import asyncio
 
@@ -443,6 +553,29 @@ def main(argv: list = None) -> int:
     i = sub.add_parser("init", help="scaffold a starter suite + CI workflow into a project")
     i.add_argument("--dir", default=".", help="target project directory")
 
+    ca = sub.add_parser("candidates", help="list captured failures eligible for promotion",
+                        parents=[common])
+    ca.add_argument("--run", default=None, help="limit to one run id or label")
+    ca.add_argument("--below", type=float, default=0.5, help="score threshold")
+    ca.add_argument("--limit", type=int, default=50)
+
+    p = sub.add_parser("promote", help="turn a captured failure into a regression test case",
+                       parents=[common])
+    p.add_argument("trace", nargs="?", default=None, help="trace id (or unique prefix); omit for bulk")
+    p.add_argument("--to", default="regressions", help="target dataset name")
+    p.add_argument("--run", default=None, help="bulk: limit to one run id or label")
+    p.add_argument("--below", type=float, default=0.5, help="bulk: score threshold")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--yes", action="store_true", help="bulk: skip the confirmation prompt")
+    p.add_argument("--allow-duplicate", action="store_true",
+                   help="promote even when an identical case already exists")
+
+    sub.add_parser("datasets", help="list datasets", parents=[common])
+
+    e = sub.add_parser("export", help="export a dataset as probe JSONL for your app to answer",
+                       parents=[common])
+    e.add_argument("dataset", help="dataset name (see `faithgate datasets`)")
+
     args = parser.parse_args(argv)
     if args.cmd == "up":
         return _cmd_up(args)
@@ -467,6 +600,14 @@ def main(argv: list = None) -> int:
         return _cmd_run(conn, args)
     if args.cmd == "score":
         return _cmd_score(conn, args)
+    if args.cmd == "candidates":
+        return _cmd_candidates(conn, args)
+    if args.cmd == "promote":
+        return _cmd_promote(conn, args)
+    if args.cmd == "datasets":
+        return _cmd_datasets(conn)
+    if args.cmd == "export":
+        return _cmd_export(conn, args)
     return 0
 
 

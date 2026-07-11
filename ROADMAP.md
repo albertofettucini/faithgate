@@ -7,6 +7,9 @@ retention in `span.attributes_json`). None of this is v1 scope; nothing here may
 ## v2 — auto-eval generation (the star)
 Low-scoring captured responses get promoted into a reusable, versioned test dataset. Production
 failures become regression tests.
+**v1.5 shipped:** manual promotion is live (`candidates` / `promote` / `datasets` / `export`) —
+human-reviewed, provenance-linked, dedup-guarded. What remains for v2 proper: smarter mining
+(filters, clustering of similar failures) once real usage shows which filter is right.
 *Already pre-wired in v1:* `dataset.kind` enum, `dataset_item.origin_trace_id` ↔
 `trace.source_dataset_item_id`, contexts stored on the trace — promotion is two INSERTs.
 

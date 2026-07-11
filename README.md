@@ -231,6 +231,25 @@ your app ──spans──► POST /v1/spans ─┐        (or: faithgate.captur
 - **Gate:** runs are matched by content (never row id); new, missing, duplicate, and abstained cases
   are always visible in the report.
 
+## From failure to regression test (the flywheel)
+
+Hand-written suites only cover what you thought to ask. FaithGate turns **real captured
+failures** into permanent test cases:
+
+```bash
+faithgate candidates                      # low-scoring captured answers, worst first
+faithgate promote 01KX8D85C3QZGD          # one failure → a case in the 'regressions' dataset
+faithgate promote --below 0.5 --yes       # bulk (always shows the list first — never silent)
+
+faithgate export regressions > probes.jsonl   # id + question + contexts (no answers)
+# → your app answers the probes into answered.jsonl →
+faithgate run --suite answered.jsonl --label v2 --judge claude
+```
+
+A promoted case keeps full provenance (which trace, run, judge, and score produced it) and a
+stable `id`, so the gate recognises it across versions forever: **your app can never quietly
+fail the same way twice.** Nothing is auto-promoted — you review every case.
+
 ## Design notes (the non-obvious parts)
 
 Full rationale — locked decisions, fail-closed semantics, schema pre-wiring, deliberate descopes —
@@ -259,6 +278,9 @@ lives in [DESIGN.md](DESIGN.md). Highlights:
 | `faithgate runs` | list captured runs |
 | `faithgate show --run R` | show a run's scored cases |
 | `faithgate score [--judge] [--run] [--retry-errors]` | score pending traces; optionally re-score errored ones |
+| `faithgate candidates [--run] [--below 0.5]` | list captured failures eligible for promotion |
+| `faithgate promote [trace] [--below] [--yes]` | turn captured failures into regression test cases |
+| `faithgate datasets` / `faithgate export <name>` | list datasets / export probes for your app to answer |
 | `faithgate calibrate [--judge]` | judge agreement with the human-labeled golden set |
 | `faithgate up` | start the local web panel |
 
