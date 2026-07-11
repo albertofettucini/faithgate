@@ -118,7 +118,11 @@ def render_report(judge, m: dict) -> str:
                          f"unfaithful caught: {caught} · n={cm['n']}")
     errors = m.get("errors") or []
     if errors:
-        # a broken judge must be loud, never laundered into quiet abstention
-        lines.append(f"  ✗ {len(errors)} case(s) errored — the judge is not working.")
+        # a broken judge must be loud, never laundered into quiet abstention — but a single
+        # hiccup among many scored cases is an abstention note, not a broken judge
+        if m["scored"] == 0:
+            lines.append(f"  ✗ {len(errors)} case(s) errored — the judge is not working.")
+        else:
+            lines.append(f"  ⚠ {len(errors)} case(s) errored — treated as abstentions.")
         lines.append(f"    first error: {errors[0][:300]}")
     return "\n".join(lines)

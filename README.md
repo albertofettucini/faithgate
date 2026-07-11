@@ -7,7 +7,7 @@
 > **You changed a prompt. Did any answer quietly start making things up?**
 >
 > FaithGate scores every answer against its sources, diffs versions, and **fails CI on
-> regression** — with a judge whose trustworthiness is *measured* (85%, n=40), never assumed.
+> regression** — with a judge whose trustworthiness is *measured* (83%, n=100), never assumed.
 > Zero infra, fully local, **pytest for prompts.**
 
 ![tests](https://github.com/albertofettucini/faithgate/actions/workflows/tests.yml/badge.svg)
@@ -145,7 +145,8 @@ FaithGate never presents a score as more certain than it is.
 - **`local-verification` is labeled precisely.** `--judge claude-local` runs the entailment check
   on-device (Vectara HHEM, via `faithgate[local]`) but still uses Claude for claim extraction. It
   is **not** "fully offline", and the tool says so. Its cost is measured, not guessed: on-device
-  verification trades ~8 points of balanced agreement vs the full Claude judge (see the table).
+  verification trades measured points of balanced agreement vs the full Claude judge, with the
+  biggest gap on cross-chunk synthesis (see the table).
 - **The offline judge is deliberately distrusted.** `--judge heuristic` is a token-overlap proxy so
   the whole pipeline runs keyless. Its measured weakness — it cannot see contradictions built from
   the context's own words — is **asserted by a unit test** (`test_heuristic_misses_contradiction`),
@@ -156,19 +157,23 @@ FaithGate never presents a score as more certain than it is.
 - **Judge changes are flagged.** Every run records a manifest (judge id/model/kind, RAGAS version,
   runner version, suite hash). `gate` refuses to compare runs whose judges differ (exit 3) unless
   you pass `--allow-judge-change`.
-- **Measured agreement, sample size shown.** `faithgate calibrate` runs the judge over a 40-example
-  hand-labeled golden set (faithful paraphrases, partial support, date/entity swaps, negations,
-  unsupported additions):
+- **Measured agreement, per failure type.** `faithgate calibrate` runs the judge over a
+  100-example hand-labeled golden set, stratified across the suite-design categories above
+  (40 clean + 20 each of partial-context, cross-chunk, plausible-but-unsupported). Balanced
+  agreement with human labels — *n=100, directional, not precise*:
 
-  | judge | agreement (balanced) | faithful kept | unfaithful caught |
-  |---|---|---|---|
-  | `claude` (default, claude-sonnet-5) | **85%** *(n=40 — directional)* | 20/20 | 14/20 |
-  | `claude-local` (HHEM verify on-device) | 77% *(n=40 — directional)* | 19/20 | 12/20 |
-  | `heuristic` (offline proxy) | 68% *(n=40 — directional)* | 18/20 | 9/20 |
+  | judge | overall | clean | partial-context | cross-chunk | plausible-unsupported |
+  |---|---|---|---|---|---|
+  | `claude` (default) | **83%** | 88% | **94%** (11/11 caught) | **90%** (8/10) | 55% (1/11) |
+  | `claude-local` (HHEM) | 69% | 77% | 72% (11/11) | 55% (3/10) | 59% (2/11) |
+  | `heuristic` (offline) | 63% | 68% | 47% (8/11) | 60% (3/10) | **71%** (7/11) |
 
-  Even the trusted judge is not an oracle — 85% agreement is consistent with published
-  frontier-judge benchmarks, and that's exactly why the number is measured and shown instead
-  of assumed. Re-measure against your own key anytime: `faithgate calibrate --judge claude`.
+  The stratified numbers are the point: **every judge has a measured blind spot.** The trusted
+  Claude judge aces the "hard" strata but catches only 1/11 *plausible-but-unsupported* claims —
+  it knows they're true in the world and forgets they aren't in the source. The zero-knowledge
+  token-overlap proxy, immune to plausibility, catches 7/11 of exactly those. Complementary blind
+  spots are why the judge is labeled, measured, and swappable — and why a judge cascade is on the
+  [ideas list](IDEAS.md). Re-measure anytime: `faithgate calibrate --judge claude`.
 
 ## In CI
 

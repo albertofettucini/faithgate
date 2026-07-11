@@ -63,9 +63,12 @@ migrations:
 
 ## The calibration harness
 
-The judge is an AI too, so it takes an exam: a 40-example hand-labeled golden set, stratified across
-failure types (faithful paraphrases, partial support, date/entity swaps, negations, unsupported
-additions). `faithgate calibrate` reports agreement-with-humans per judge, with n shown, and its
+The judge is an AI too, so it takes an exam: a 100-example hand-labeled golden set, stratified
+across failure types (40 clean cases plus 20 each of partial-context, cross-chunk synthesis, and
+plausible-but-unsupported). Stratification is what turns "the judge is 83% reliable" into "the
+judge is 94% reliable on partial-context but catches only 1/11 plausible-but-unsupported claims" —
+blind spots measured, not averaged away. `faithgate calibrate` reports agreement per judge and per
+stratum, with n shown, and its
 error surface is loud: per-sample timeouts, live progress, first-error printed, exit 2 when nothing
 was actually judged. Measured results live in the README and are re-measurable by anyone with a key.
 
